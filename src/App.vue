@@ -1,39 +1,34 @@
 <template>
-  <div>
-    <form>
-      <multiselect v-model="stateValue" track-by="name" label="name" :options="states" @select="getCity" placeholder="select states"></multiselect>
-      <multiselect v-model="cityValue" :options="cities" placeholder="select cities"></multiselect>
-      <multiselect v-model="productValue" track-by="product" label="product" :options="products" @select="getCost" :searchable="false" placeholder="select products"></multiselect>
-    </form>
-    <div>quantity: <input @input="getQuantity">/{{maxQuantity}} cost: {{cost}}</div>
-    <div>total cost: {{cost*customerQuantity}}</div>
-  </div>
+    <div>
+      <survey  v-if="survey" :survey="survey" ></survey>
+    </div>
 </template>
 
 <script>
+import * as SurveyVue from 'survey-vue'
+import 'bootstrap/dist/css/bootstrap.css';
 import axios from 'axios'
-//import HelloWorld from './components/HelloWorld.vue'
-import Multiselect from 'vue-multiselect'
+
+const Survey = SurveyVue.Survey
 
 export default {
   name: 'App',
   data(){
     return {
-      stateValue:null,
-      cityValue:'',
-      productValue:'',
       states: [],
       cities: [],
       products: [],
-      cost: 0,
-      customerQuantity: 0,
-      maxQuantity: 100,
+      price:0,
+      customQuantity:0,
+      survey:null
     }
   },
+  
   components: {
-    Multiselect
+    Survey
   },
-  beforeMount() {
+  
+  beforeMount() {  
     const headers = new Headers();
     headers.append("X-CSCAPI-KEY", "YXFqZEJsWWpEbFFzSFNBb0ZKNkhTRVZ2SEhlc1dxUTBsOEd3dlhERA==");
     const requestOptions = {
@@ -46,47 +41,134 @@ export default {
       .then(response => response.json())
       .then(result => {
         result.forEach(state => {
-          this.states.push({name: state.name, abb: state.iso2})
+          this.states.push({text:state.name, value:state.iso2})
         })
+      })
+      .then(()=>{
+        const surveyValueChanged=(sender,options)=>{
+          let max,customer
+
+          if(options.value===model.getValue('quantity')){
+            options.value = parseInt(options.value)
+          }
+          
+          if(model.getValue('products')){
+            max = parseInt(model.getValue('products').maximum)
+            this.price=parseInt(model.getValue('products').cost)
+            // console.log(max,this.price,"products value")
+          }
+          if(model.getValue('quantity')){
+            customer = parseInt(model.getValue('quantity'))
+            if(customer>max){
+              alert("We do not have that much in stock. Replacing your quantity with the maximum we have")
+              model.setValue('quantity',max)
+              
+            }
+            model.setValue('calculatedCost',customer*this.price)
+            // console.log(customer,"quantity")
+          }
+
+          if(!Number.isInteger(options.value)&&options.value.length<=2){
+            this.getCity(options.value, json)
+          }
+        }
+        let json = {
+          questions: [
+            {
+                type: "dropdown",
+                name: "state",
+                title: "select state",
+                isRequired: true,
+                colCount: 0,
+                choices:this.states
+            },
+            {
+              type: "dropdown",
+                name: "cities",
+                title: "select city",
+                isRequired: true,
+                colCount: 0,
+                choices: this.cities
+            },
+            {
+              type: "dropdown",
+              name: "products",
+              title: "select product",
+              isRequired: true,
+              colCount: 0,
+              choices: this.products
+            },
+            {
+              type: "text",
+              name: "quantity",
+              title: "how much?",
+              isRequired: true,
+              colCount: 0,
+              // inputType:"int",
+              validators: [
+                {
+                    type: "numeric",
+                }
+              ],
+            },
+            {
+              type: "text",
+              mode: "display",
+              readOnly: true,
+              name: "calculatedCost",
+              title: "total cost",
+              colCount: 0,
+            }
+          ]
+        } 
+
+        const model = new SurveyVue.Model(json)
+        this.survey = model
+        
+        model
+        .onValueChanged
+        .add(surveyValueChanged)
       })
       .catch(error => console.log('error', error));
     
     axios.get("http://localhost:3000")
     .then(response=>{
-      this.products=response.data
-    })
+      let prod = []
+      prod=response.data
+      prod.forEach(item=>{
+        this.products.push({text: item.product, cost:parseInt(item.cost), maximum:parseInt(item.max_quantity)})
+      })
+    })    
   },
+
   methods: {
     getCity (stateName) {
-      const stateAbbr = stateName.abb
-
-      var headers = new Headers();
+      let stateAbbr = stateName
+      
+      let headers = new Headers();
       headers.append("X-CSCAPI-KEY", "YXFqZEJsWWpEbFFzSFNBb0ZKNkhTRVZ2SEhlc1dxUTBsOEd3dlhERA==");
-
-      var requestOptions = {
+      const  requestOptions = {
         method: 'GET',
         headers: headers,
         redirect: 'follow'
       };
 
       fetch(`https://api.countrystatecity.in/v1/countries/IN/states/${stateAbbr}/cities`, requestOptions)
-        .then(response => response.json())
-        .then(result => result.forEach(city => {
-          this.cities.push(city.name)
-        }))
+        .then(response =>response.json())
+        .then(result=>this.cities=result)
+        .then(()=>{
+          let cityNames = []
+          this.cities.forEach(city=>{
+            cityNames.push(city.name)
+          })
+          // console.log(cityNames,'cityNames')
+          let q = this.survey.getQuestionByName('cities')
+          q.choices=cityNames
+          q
+            .choicesByUrl
+            .run()
+        })
         .catch(error => console.log('error', error));
-    },
-    getCost (productName) {
-      this.cost = productName.cost
-      this.maxQuantity = productName.max_quantity
-    },
-    getQuantity(e){
-      if(parseInt(e.target.value)>this.maxQuantity){
-        alert("that much quantity we don't have, so we will replace that with the maximum we have")
-        this.customerQuantity=this.maxQuantity
-      } else {
-      this.customerQuantity=e.target.value
-      }
     }
   }
 }

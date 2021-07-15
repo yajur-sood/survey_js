@@ -9,10 +9,12 @@
   },
   "dependencies": {
     "axios": "^0.21.1",
+    "bootstrap": "^5.0.2",
     "core-js": "^3.6.5",
     "cors": "^2.8.5",
     "express": "^4.17.1",
     "mongodb": "^3.6.10",
+    "survey-vue": "^1.8.55",
     "vue": "^2.6.11",
     "vue-multiselect": "^2.1.6"
   },
